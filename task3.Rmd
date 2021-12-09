@@ -174,5 +174,8 @@ grid.arrange(p1, p2, ncol=2)
 
 ```
 
-
+## Reference: 
+https://www.r-bloggers.com/2020/04/sentiment-analysis-in-r-with-sentimentr-that-handles-negation-valence-shifters/ 
+https://www.gutenberg.org/ebooks/45 https://learn.bu.edu/ultra/courses/_80585_1/cl/outline 
+https://www.tidytextmining.com/sentiment.html
 
