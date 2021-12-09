@@ -186,3 +186,9 @@ anne_ %>% anti_join(custom_stop_words)%>%
 
 Positive words are obviously much larger than negative words. As a children book, the whole book is about family, friendship and childhood, which is why there are more positive words.
 
+## Reference: 
+https://www.r-bloggers.com/2020/04/sentiment-analysis-in-r-with-sentimentr-that-handles-negation-valence-shifters/ 
+https://www.gutenberg.org/ebooks/45 https://learn.bu.edu/ultra/courses/_80585_1/cl/outline 
+https://www.tidytextmining.com/sentiment.html
+
+
