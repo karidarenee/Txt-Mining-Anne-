@@ -1,0 +1,188 @@
+---
+title: 'MA615: Text Analysis'
+author: "Yongrong Chai"
+date: "11/29/2021"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE, comment = NA}
+knitr::opts_chunk$set(echo = TRUE,out.width="0.9\\linewidth",dev="pdf",fig.align  = 'center')
+pacman::p_load(
+  "ggplot2",
+  "knitr",
+  "VGAM",
+  "rvest",
+  "tidyverse",
+  "wordcloud",
+  "dplyr",
+  "tidytext",
+  "stringr",
+  "tidyr",
+  "scales",
+  "gridExtra",
+  "magrittr",
+  "sentimentr"
+)
+#devtools::install_github("Truenumbers/tnum/tnum")
+```
+
+This is a sentiment analysis of Anne of Green Gables by Lucy Maud Montgomery.
+```{r, echo=FALSE}
+anne <- read_html("https://www.gutenberg.org/cache/epub/45/pg45-images.html")
+read_anne <- anne %>%
+ html_nodes("p") %>%
+ html_text()
+
+#transfer into a data frame
+anne_ <- data_frame(line = 1:1786, text = read_anne) #whole size1786
+#remove empty lines
+anne_ <- anne_ %>% filter(text != "")
+#a token per row
+anne_ <- anne_ %>%unnest_tokens(word,text)
+#omit non-characters
+anne_ <- anne_ %>% mutate(word = str_extract(word,"[a-z']+"))
+anne_ <-na.omit(anne_)
+#omit stop-words
+anne_<- anne_ %>% anti_join(stop_words)
+```
+
+## Overall Word Count
+```{r, echo=FALSE}
+library(tidytext)
+#overall word count
+anne1 <- anne_ %>%
+count(word, sort = TRUE)%>%
+  filter(n > 100) %>%
+  mutate(word = reorder(word, n))
+anne1 %>% ggplot(aes(word, n)) +geom_col() +xlab(NULL) +coord_flip() + ggtitle("Word Count for Anne of Green Gables")
+```
+Top 4 words in book are
+Anne: protagonist is Anne
+Marilla: Although she is not the protagonist's biological mother, she is like Anne's mother.
+Diana:Anne's best friend
+Matthew: Marilla's brother, he is like Anne's father.
+
+
+## Positive word count V.S. negative word count
+```{r, echo=FALSE}
+#Positive word count
+nrc_joy <- get_sentiments("nrc") %>% 
+  filter(sentiment == "positive")
+
+anne2 <- anne_ %>%
+  inner_join(nrc_joy) %>%
+  count(word, sort = TRUE)%>%
+  filter(n > 30) %>%
+  mutate(word = reorder(word, n))
+p1<-anne2 %>% ggplot(aes(word, n)) +geom_col() +xlab(NULL) +coord_flip() +ggtitle("Positive Word Count for\nAnne of Green Gables")
+
+#negative word count
+nrc_neg <- get_sentiments("nrc") %>% 
+  filter(sentiment == "negative")
+
+anne2 <- anne_ %>%
+  inner_join(nrc_neg) %>%
+  count(word, sort = TRUE)%>%
+  filter(n > 20) %>%
+  mutate(word = reorder(word, n))
+p2<-anne2 %>% ggplot(aes(word, n)) +geom_col() +xlab(NULL) +coord_flip() +ggtitle("Negative Word Count for\n Anne of Green Gables")
+grid.arrange(p1, p2, ncol=2)
+```
+
+The main plot of this book:
+Anne is an orphan who is adopted by Matthew and Marilla and grows up on their farm, Green Gables. 
+Positive words here show the joy of growing up as a little girl. Cold words here shows Anne, as an orphan, just arrived in a new environment of loneliness, exclusion, re-establish the world view of helplessness at the beginning.
+
+
+## Comparing the three sentiment dictionaries
+```{r, echo=FALSE}
+get_sentiments("afinn")
+get_sentiments("nrc")
+get_sentiments("bing")
+
+afinn <- anne_ %>% 
+  inner_join(get_sentiments("afinn")) %>% 
+                 #filter(sentiment %in% c("positive", 
+                                        # "negative")) %>%
+  group_by(index = line %/% 10) %>% 
+  summarise(sentiment = sum(value)) %>% 
+  mutate(method = "AFINN")
+
+
+bing_and_nrc <- bind_rows(
+  anne_ %>% 
+    inner_join(get_sentiments("bing")) %>%
+    mutate(method = "Bing et al."),
+  anne_ %>% 
+    inner_join(get_sentiments("nrc") %>% 
+                 filter(sentiment %in% c("positive", 
+                                         "negative"))
+    ) %>%
+    mutate(method = "NRC")) %>%
+  count(method, index = line %/% 10, sentiment) %>%
+  pivot_wider(names_from = sentiment,
+              values_from = n,
+              values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+
+bind_rows(afinn, 
+          bing_and_nrc) %>%
+  ggplot(aes(index, sentiment, fill = method)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~method, ncol = 1, scales = "free_y")
+```
+
+
+
+
+## Most common positive and negative words
+```{r, echo=FALSE}
+bing_word_counts <- anne_ %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  slice_max(n, n = 10) %>% 
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(x = "Contribution to sentiment",
+       y = NULL)
+
+#Remove stop words "miss"
+custom_stop_words <- bind_rows(tibble(word = c("miss"),  
+                                      lexicon = c("custom")), 
+                               stop_words)
+
+#custom_stop_words
+```
+
+## Word Clouds
+```{r, echo=FALSE, warning=FALSE, comment = NA}
+anne_ %>%
+  anti_join(custom_stop_words) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 100))
+
+```
+
+
+```{r, echo=FALSE, warning=FALSE, comment = NA, fig.width=10, fig.height=10}
+library(reshape2)
+
+anne_ %>% anti_join(custom_stop_words)%>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("gray20", "gray80"),
+                   max.words = 100)
+```
+
+Positive words are obviously much larger than negative words. As a children book, the whole book is about family, friendship and childhood, which is why there are more positive words.
+

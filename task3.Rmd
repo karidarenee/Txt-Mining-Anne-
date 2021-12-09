@@ -1,0 +1,178 @@
+---
+title: 'MA615: Text Analysis Tnum'
+author: "Yongrong Chai"
+date: "11/29/2021"
+output:
+  word_document: default
+  html_document: default
+---
+
+Truenumbers provides data organization and tools that I can analyze my book by sentences.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,out.width="0.9\\linewidth",dev="pdf",fig.align  = 'center')
+pacman::p_load(
+  "ggplot2",
+  "knitr",
+  "VGAM",
+  "rvest",
+  "tidyverse",
+  "wordcloud",
+  "dplyr",
+  "tidytext",
+  "stringr",
+  "tidyr",
+  "scales",
+  "gridExtra",
+  "magrittr",
+  "sentimentr"
+)
+#devtools::install_github("Truenumbers/tnum/tnum")
+```
+
+```{r warning=FALSE, comment = NA,message=FALSE, echo=FALSE}
+library(tnum)
+tnum.authorize("mssp1.bu.edu")
+tnum.setSpace("test2")
+source("Book2TN-v6A-1.R")
+```
+
+
+```{r , warning=FALSE, comment = NA,message=FALSE, echo=FALSE}
+#tnum.getDBPathList(taxonomy="subject", levels=2, max = 500)
+library(gutenbergr)
+#Book_Anne <- gutenberg_download(45)
+#adding <> mannual into txt file
+Book_Anne_tnum <- read.table("Book_Anne_text.txt", header = T)
+#tnBooksFromLines(Book_Anne_tnum$text, "Montgomery/Anne")
+```
+
+## Whole book analysis
+```{r, warning=FALSE, comment = NA,message=FALSE, echo=FALSE}
+#Change all the text into sentence level
+anne_sentence3 <- tnum.query('Montgomery/Anne/section# has text', max = 5540) %>% #Change all the text into sentence level
+                  tnum.objectsToDf()%>% 
+                  select(subject:string.value) #Select useful columns
+#Give an average score for each sentence
+senti_col2 <- sentiment_by(anne_sentence3$string.value)
+#merge two data frame
+anne_sentence_score <- cbind(anne_sentence3,senti_col2) 
+#Positive VS Negative score for whole books
+anne_sentence_score %>% ggplot() + geom_col(aes(x = element_id, y = ave_sentiment))+
+  labs(x = NULL, y = 'sentiment score', title = 'Sentiment score sentence level')
+
+```
+This is the plot for the whole book sentences analysis. The positive sentences are much more than negative sentences, it is as same as the result from task2. 
+
+
+## Analysis of first section and the last section of the book
+```{r,  warning=FALSE, comment = NA,message=FALSE, echo=FALSE}
+
+anne_sentence_score1<-dplyr::filter(anne_sentence_score, grepl('e/section:0002/p', subject))
+anne_sentence_score38<-dplyr::filter(anne_sentence_score, grepl('e/section:0038/p', subject))
+anne_sentence_score1%>% ggplot() + geom_col(aes(x = element_id, y = ave_sentiment))+
+  labs(x = NULL, y = 'sentiment score', title = 'Sentiment score sentence level for the first section')
+anne_sentence_score38%>% ggplot() + geom_col(aes(x = element_id, y = ave_sentiment))+
+  labs(x = NULL, y = 'sentiment score', title = 'Sentiment score sentence level for the last section(38)')
+
+```
+
+In section1, protagonist, Anne, just came to Green Gable. Although there was a lot of joy, there was also a bad situation that she was not welcome, so extreme negative sentences would appear here
+In the last section, the ending was perfect, full of joy and gratitude, but there were also stories of family deaths and friends parting, but overall there were more positive sentences.
+
+
+### Comparison sentiment_by with nrc and bing
+I used a for loop to cut out every word in each sentence and then find the sentiment score in the corresponding NRC and Bing. Then sum them by sentence and divide by the total number of words in each sentence to get the avg_sentiment score in the same form as sentiment_by.
+
+```{r, warning=FALSE, comment = NA,message=FALSE, echo=FALSE}
+custom_stop_words <- bind_rows(tibble(word = c("miss"),  
+                                      lexicon = c("custom")), 
+                               stop_words)
+anne_sentence_score1<- cbind(anne_sentence_score, bing_sum = 0)
+temp <- NA
+for(i in 1:length(anne_sentence_score1$element_id)) {
+  temp<-anne_sentence_score1$string.value[i]%>% as.data.frame()
+  temp$temp = temp$.
+  newlist<-temp%>%unnest_tokens(bing_word,temp)%>% mutate(word = str_extract(bing_word,"[a-z']+"))%>% anti_join(custom_stop_words)%>%inner_join(get_sentiments("bing"))
+  anne_sentence_score1$bing_sum[i] <- (sum(newlist$sentiment == "positive") - sum(newlist$sentiment == "negative"))/anne_sentence_score1$word_count[i]
+}
+
+
+anne_sentence_score2<- cbind(anne_sentence_score1, nrc_sum = 0)
+temp <- NA
+for(i in 1:length(anne_sentence_score2$element_id)) {
+  temp<-anne_sentence_score2$string.value[i]%>% as.data.frame()
+  temp$temp = temp$.
+  newlist<-temp%>%unnest_tokens(nrc_word,temp)%>% mutate(word = str_extract(nrc_word,"[a-z']+"))%>% anti_join(custom_stop_words)%>%inner_join(get_sentiments("nrc") %>% 
+                 filter(sentiment %in% c("positive", 
+                                         "negative")))
+  anne_sentence_score2$nrc_sum[i] <- (sum(newlist$sentiment == "positive") - sum(newlist$sentiment == "negative"))/anne_sentence_score2$word_count[i]
+}
+
+par(mfrow=c(3,1))
+p1=anne_sentence_score2[1:500,] %>% ggplot(aes(element_id, ave_sentiment, color = "Blues")) +
+  geom_col(show.legend = FALSE)+
+   xlab("sentence id")+
+   ylab("Average Sentiment")+
+  ggtitle("tnum")
+p2=anne_sentence_score2[1:500,] %>% ggplot(aes(element_id, bing_sum, color = "green")) +
+  geom_col(show.legend = FALSE)+
+   xlab("sentence id")+
+   ylab("Average Sentiment")+
+  ggtitle("bing")
+p3=anne_sentence_score2[1:500,] %>% ggplot(aes(element_id, nrc_sum, color = "orange")) +
+  geom_col(show.legend = FALSE)+
+   xlab("sentence id")+
+   ylab("Average Sentiment")+
+  ggtitle("nrc")
+
+p1
+p2
+p3
+#library(ggpubr)
+#ggarrange(p1, p2, p3, nrow = 3)
+```
+
+Extra Credit
+```{r, warning=FALSE, comment = NA,message=FALSE, echo=FALSE}
+qr1 <- tnum.query('Montgomery/Anne/section:# has * = REGEXP(\" Anne\")') %>% tnum.objectsToDf()
+tnum.tagByQuery('Montgomery/Anne/section:# has * = REGEXP(\" Anne\")', adds = ("Anne"))
+```
+
+```{r, warning=FALSE, comment = NA,message=FALSE, echo=FALSE}
+wordcount3 <- anne_sentence3 %>% unnest_tokens(word,string.value) %>% anti_join(custom_stop_words)
+
+Anne_ <- wordcount3 %>%
+count(word, sort = TRUE)%>%
+  filter(n > 100) %>%
+  mutate(word = reorder(word, n)) 
+
+get_sentiments("nrc") %>% 
+  filter(sentiment == "positive")
+
+
+Anne_ %>% ggplot(aes(word, n)) +geom_col() +xlab(NULL) +coord_flip() + ggtitle("Word Count for Anne of Green Gables")
+```
+
+```{r, warning=FALSE, comment = NA,message=FALSE, echo=FALSE}
+#Positive word count
+nrc_joy <- get_sentiments("nrc") %>% 
+  filter(sentiment == "positive")
+
+p1<-Anne_ %>% ggplot(aes(word, n)) +geom_col() +xlab(NULL) +coord_flip() +ggtitle("Positive Word Count for\nAnne of Green Gables")
+
+#negative word count
+nrc_neg <- get_sentiments("nrc") %>% 
+  filter(sentiment == "negative")
+
+anne2 <- Anne_ %>%
+  inner_join(nrc_neg) %>%
+  count(word, sort = TRUE)%>%
+ # filter(n > 20) %>%
+  mutate(word = reorder(word, n))
+p2<-Anne_ %>% ggplot(aes(word, n)) +geom_col() +xlab(NULL) +coord_flip() +ggtitle("Negative Word Count for\n Anne of Green Gables")
+grid.arrange(p1, p2, ncol=2)
+
+```
+
+
+
